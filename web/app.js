@@ -297,7 +297,7 @@ function Capture({ invId, llm, onCaptured, goReview, pending }) {
       ${result.proposals.length > 0 && html`<button class="btn primary" onClick=${goReview}>Review now</button>`}
     </div>`}
     ${!result && pending > 0 && html`<button class="btn" onClick=${goReview}>${pending} waiting for review</button>`}
-    ${!llm && html`<p class="muted small center">Basic parser in use — the server has no AI key configured.</p>`}
+    ${!llm && html`<p class="muted small center">Basic parser in use — the server has no AI model configured.</p>`}
   </div>`;
 }
 

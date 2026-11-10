@@ -1,17 +1,38 @@
 import { parseHeuristic } from './heuristic.js';
-import { llmAvailable, parseWithLLM } from './llm.js';
+import { claudeAvailable, parseWithClaude } from './llm.js';
+import { localConfig, parseWithLocal } from './local.js';
+
+/**
+ * Which model backend parses transcripts. QUICKINV_LLM picks one explicitly
+ * ("local", "claude", "off"); unset means: a configured local model wins,
+ * then Claude, then none.
+ * @returns {'local'|'claude'|null}
+ */
+export function llmBackend() {
+  const want = (process.env.QUICKINV_LLM || 'auto').toLowerCase();
+  if (want === 'off' || want === 'none') return null;
+  const local = Boolean(localConfig());
+  const claude = claudeAvailable();
+  if (want === 'local') return local ? 'local' : null;
+  if (want === 'claude' || want === 'anthropic') return claude ? 'claude' : null;
+  return local ? 'local' : claude ? 'claude' : null;
+}
+
+export const llmAvailable = () => llmBackend() !== null;
 
 /**
  * Parse a transcript into proposed items. Never throws: the heuristic parser
- * is the fallback for a missing or failing LLM.
- * @returns {Promise<{parser:'llm'|'heuristic', items:object[], warning?:string}>}
+ * is the fallback for a missing or failing model.
+ * @returns {Promise<{parser:'claude'|'local'|'heuristic', items:object[], warning?:string}>}
  */
 export async function parseTranscript(input) {
-  if (llmAvailable()) {
+  const backend = llmBackend();
+  if (backend) {
     try {
-      return { parser: 'llm', items: await parseWithLLM(input) };
+      const items = backend === 'local' ? await parseWithLocal(input) : await parseWithClaude(input);
+      return { parser: backend, items };
     } catch (err) {
-      console.error('[quickinv] LLM parse failed, using heuristic parser:', err?.message || err);
+      console.error(`[quickinv] ${backend} parse failed, using heuristic parser:`, err?.message || err);
       return {
         parser: 'heuristic',
         items: parseHeuristic(input.transcript),
@@ -21,5 +42,3 @@ export async function parseTranscript(input) {
   }
   return { parser: 'heuristic', items: parseHeuristic(input.transcript) };
 }
-
-export { llmAvailable };
