@@ -128,6 +128,28 @@ test('two pending captures of the same new item do not create duplicates', async
   assert.deepEqual(items.map((i) => [i.name, i.quantity]), [['Hammer', 3]]);
 });
 
+test('location comes from speech only when the box is empty', async () => {
+  const { call, signup } = setup();
+  const t = await signup('A');
+  const inv = (await call('POST', '/api/inventories', t, { name: 'Garage' })).body;
+  const base = `/api/inventories/${inv.id}`;
+  const transcript = 'on the top shelf, drill, sander, hammer in the red toolbox';
+
+  const heard = (await call('POST', `${base}/captures`, t, { transcript })).body;
+  assert.deepEqual(heard.proposals.map((p) => [p.name, p.location]), [
+    ['Drill', 'top shelf'], ['Sander', 'top shelf'], ['Hammer', 'red toolbox'],
+  ]);
+  await call('POST', `${base}/proposals/accept-all`, t);
+  let { items } = (await call('GET', `${base}/state`, t)).body;
+  assert.deepEqual(items.map((i) => [i.name, i.location]), [['Drill', 'top shelf'], ['Hammer', 'red toolbox'], ['Sander', 'top shelf']]);
+
+  const boxed = (await call('POST', `${base}/captures`, t, { transcript: 'wrench in the red toolbox, saw', location: 'Shelf A' })).body;
+  assert.deepEqual(boxed.proposals.map((p) => [p.name, p.location]), [['Wrench', 'Shelf A'], ['Saw', 'Shelf A']]);
+
+  const none = (await call('POST', `${base}/captures`, t, { transcript: 'ladder' })).body;
+  assert.equal(none.proposals[0].location, '');
+});
+
 test('auth and validation', async () => {
   const { call, signup } = setup();
   assert.equal((await call('GET', '/api/me')).status, 401);

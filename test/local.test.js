@@ -24,7 +24,7 @@ async function fakeServer(handler) {
 const cfg = (url) => ({ url: `${url}/chat/completions`, model: 'test-model', apiKey: 'k', timeoutMs: 5000 });
 const REPLY = JSON.stringify({ items: [
   { name: 'USB-C cable', quantity: 2, details: [], confidence: 'low', note: 'Said twice.' },
-  { name: 'Duct tape', quantity: 1, details: ['black'], confidence: 'high', note: '' },
+  { name: 'Duct tape', quantity: 1, details: ['black'], location: ' top  shelf ', confidence: 'high', note: '' },
 ] });
 
 test('schema-constrained request and parsed reply', async () => {
@@ -32,8 +32,8 @@ test('schema-constrained request and parsed reply', async () => {
   try {
     const items = await parseWithLocal({ transcript: 'usb c cable usb c cable duct tape black', location: 'Shelf A', existingNames: ['Hammer'] }, cfg(srv.url));
     assert.deepEqual(items, [
-      { name: 'USB-C cable', quantity: 2, details: [], confidence: 'low', notes: ['Said twice.'] },
-      { name: 'Duct tape', quantity: 1, details: ['black'], confidence: 'high', notes: [] },
+      { name: 'USB-C cable', quantity: 2, details: [], location: '', confidence: 'low', notes: ['Said twice.'] },
+      { name: 'Duct tape', quantity: 1, details: ['black'], location: 'top shelf', confidence: 'high', notes: [] },
     ]);
     const [req] = srv.requests;
     assert.equal(req.url, '/v1/chat/completions');
@@ -60,7 +60,7 @@ test('tolerates sloppy replies', async () => {
   const srv = await fakeServer(() => ({ content: sloppy }));
   try {
     assert.deepEqual(await parseWithLocal({ transcript: 'x' }, cfg(srv.url)), [
-      { name: 'hammer', quantity: 3, details: [], confidence: 'medium', notes: [] },
+      { name: 'hammer', quantity: 3, details: [], location: '', confidence: 'medium', notes: [] },
     ]);
   } finally { await srv.close(); }
   assert.throws(() => extractJson('no json here'));

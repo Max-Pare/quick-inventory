@@ -67,3 +67,49 @@ test('text helpers', () => {
   assert.ok(similarity('lightning phone charger', 'lightning charger') > 0.6);
   assert.ok(similarity('duct tape', 'raspberry pi') < 0.3);
 });
+
+const located = (items) => items.map((i) => [i.name, i.quantity, i.location]);
+
+test('location at the end of an item applies to that item', () => {
+  assert.deepEqual(located(parseHeuristic('hammer in the red toolbox, two drills, pliers under the workbench, tape next to the fridge')), [
+    ['Hammer', 1, 'red toolbox'],
+    ['Drills', 2, ''],
+    ['Pliers', 1, 'under the workbench'],
+    ['Tape', 1, 'next to the fridge'],
+  ]);
+});
+
+test('location said on its own sticks until the next one', () => {
+  const items = parseHeuristic('on the top shelf\ndrill\nsander\nnow in the bottom drawer\ntape\nglue in bin 3\nscissors\nmoving to the garage, ladder');
+  assert.deepEqual(located(items), [
+    ['Drill', 1, 'top shelf'],
+    ['Sander', 1, 'top shelf'],
+    ['Tape', 1, 'bottom drawer'],
+    ['Glue', 1, 'bin 3'],
+    ['Scissors', 1, 'bottom drawer'],
+    ['Ladder', 1, 'garage'],
+  ]);
+});
+
+test('location and items run together without a pause', () => {
+  assert.deepEqual(located(parseHeuristic('in drawer 2 three hdmi cables')), [['HDMI cables', 3, 'drawer 2']]);
+  assert.deepEqual(located(parseHeuristic('on shelf B hammer')), [['Hammer', 1, 'shelf B']]);
+});
+
+test('things that are not locations', () => {
+  assert.deepEqual(located(parseHeuristic('usb c to hdmi adapter, plug in adapter, cable in black, box of screws, storage box, bench vise')), [
+    ['USB-C to HDMI adapter', 1, ''],
+    ['Plug in adapter', 1, ''],
+    ['Cable in black', 1, ''],
+    ['Box of screws', 1, ''],
+    ['Storage box', 1, ''],
+    ['Bench vise', 1, ''],
+  ]);
+});
+
+test('same item in different locations stays separate', () => {
+  assert.deepEqual(located(parseHeuristic('hammer in the toolbox, hammer on the bench, hammer in the toolbox')), [
+    ['Hammer', 2, 'toolbox'],
+    ['Hammer', 1, 'bench'],
+  ]);
+});

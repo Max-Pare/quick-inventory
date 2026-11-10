@@ -9,8 +9,8 @@ import { Schema, SYSTEM, buildContext, cleanItems } from './llm.js';
 const FORMAT_HINT = `
 
 Reply with a single JSON object and nothing else, in exactly this shape:
-{"items":[{"name":"USB-C cable","quantity":2,"details":["black"],"confidence":"high","note":""}]}
-"confidence" is one of "high", "medium", "low". "details" may be []. "note" may be "".`;
+{"items":[{"name":"USB-C cable","quantity":2,"details":["black"],"location":"top shelf","confidence":"high","note":""}]}
+"confidence" is one of "high", "medium", "low". "details" may be []. "location" and "note" may be "".`;
 
 // Local models are sloppier than a constrained API, so accept what can be repaired.
 const LooseSchema = z.object({
@@ -18,6 +18,7 @@ const LooseSchema = z.object({
     name: z.string(),
     quantity: z.coerce.number().catch(1),
     details: z.array(z.coerce.string()).nullish().transform((v) => v ?? []).catch([]),
+    location: z.string().nullish().transform((v) => v ?? '').catch(''),
     confidence: z.enum(['high', 'medium', 'low']).catch('medium'),
     note: z.string().nullish().transform((v) => v ?? '').catch(''),
   })),

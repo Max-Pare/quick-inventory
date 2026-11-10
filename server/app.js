@@ -240,10 +240,12 @@ export function createApp({ db, parse = parseTranscript, hasLLM = llmAvailable }
       for (const it of parsed.items) {
         const match = findMatch(db, invId, it.name);
         const notes = [...(it.notes || [])];
+        // The box on the Capture tab wins; otherwise use what was heard, if anything.
+        const itemLocation = location || String(it.location || '').trim().replace(/\s+/g, ' ').slice(0, 80);
         const res = db.prepare(
           `INSERT INTO proposals (inventory_id, capture_id, name, quantity, details, location, confidence, notes, match_item_id, match_kind)
            VALUES (?,?,?,?,?,?,?,?,?,?)`,
-        ).run(invId, captureId, it.name, it.quantity, JSON.stringify(it.details || []), location,
+        ).run(invId, captureId, it.name, it.quantity, JSON.stringify(it.details || []), itemLocation,
           it.confidence || 'high', JSON.stringify(notes), match?.id ?? null, match?.kind ?? null);
         ids.push(Number(res.lastInsertRowid));
       }

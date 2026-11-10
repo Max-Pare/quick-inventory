@@ -10,6 +10,7 @@ export const Schema = z.object({
       name: z.string().describe('Canonical item name, e.g. "USB-C cable". No quantity, no colour.'),
       quantity: z.number().int().describe('How many of this item were mentioned. At least 1.'),
       details: z.array(z.string()).describe('Attributes such as colour, size, condition, model. May be empty.'),
+      location: z.string().describe('Where the speaker said this item is, e.g. "top shelf". Empty if not stated.'),
       confidence: z.enum(['high', 'medium', 'low']),
       note: z.string().describe('Empty unless the reviewer should double-check something; then one short sentence.'),
     }),
@@ -24,6 +25,8 @@ For each physical item mentioned, output one entry:
 - name: a clean, canonical name in sentence case with normal technical capitalisation ("USB-C cable", "Raspberry Pi 4B", "Duct tape"). If the item clearly is one of the existing inventory items listed in the request, reuse that exact name so it can be merged.
 - quantity: counts stated by the speaker ("three hdmi cables", "times two"). A number that is part of a model or a measurement is not a quantity ("Raspberry Pi 4", "3 metre cable").
 - details: attributes the speaker gave for that item (colour, length, condition, brand, model), including ones said as a separate phrase right after the item ("duct tape, black" -> Duct tape with detail "black").
+- location: where the speaker said the item is, in their words without the leading preposition ("hammer in the red toolbox" -> location "red toolbox"). A location said on its own applies to every item after it until another location is said ("on the top shelf, drill, sander, now in the bottom drawer, tape" -> Drill and Sander at "top shelf", Tape at "bottom drawer"). Leave it empty when the speaker gave no location for that item; never guess one. If the request contains a <location> element, the user already set the location for everything: leave location empty for all items and do not turn spoken places into items.
+- The same item in two different locations is two entries.
 - If the same item is said more than once, output it once with the summed quantity. Repetition is ambiguous: it may be two items or a stutter/restart. When it follows a hesitation or looks like a restart, still sum it, but set confidence to "low" and explain in note so the reviewer checks the count.
 - confidence: "high" when name and quantity are unambiguous; "medium" when you corrected a likely mis-recognition; "low" when quantity or identity is a guess.
 - note: leave empty when there is nothing to check.
@@ -53,6 +56,7 @@ export function cleanItems(items) {
       name: it.name.trim().slice(0, 200),
       quantity: Math.max(1, Math.min(100000, Math.round(it.quantity) || 1)),
       details: it.details.map((d) => d.trim()).filter(Boolean).slice(0, 20),
+      location: String(it.location ?? '').trim().replace(/\s+/g, ' ').slice(0, 80),
       confidence: it.confidence,
       notes: it.note.trim() ? [it.note.trim()] : [],
     }));

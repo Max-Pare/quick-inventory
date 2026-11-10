@@ -258,8 +258,8 @@ function Capture({ invId, llm, onCaptured, goReview, pending }) {
   };
 
   return html`<div class="stack">
-    <label class="field">Where are you? <span>(applied to everything you add)</span>
-      <input type="text" value=${place} maxlength="80" placeholder="e.g. Shelf A, top drawer — optional"
+    <label class="field">Where are you? <span>(optional — leave empty to use what you say, like “…in the top drawer”)</span>
+      <input type="text" value=${place} maxlength="80" placeholder="e.g. Shelf A — applied to everything you add"
         onInput=${(e) => { setPlace(e.target.value); ls.set(locKey, e.target.value); }} />
     </label>
 
@@ -291,7 +291,7 @@ function Capture({ invId, llm, onCaptured, goReview, pending }) {
 
     ${result && html`<div class="ok stack" role="status">
       <p>${result.proposals.length
-        ? html`<b>${result.proposals.length} ${result.proposals.length === 1 ? 'item' : 'items'}</b> waiting for review: ${result.proposals.map((p) => `${p.name}${p.quantity > 1 ? ` ×${p.quantity}` : ''}`).join(', ')}`
+        ? html`<b>${result.proposals.length} ${result.proposals.length === 1 ? 'item' : 'items'}</b> waiting for review: ${result.proposals.map((p) => `${p.name}${p.quantity > 1 ? ` ×${p.quantity}` : ''}${p.location ? ` @ ${p.location}` : ''}`).join(', ')}`
         : 'Nothing that looks like an item was heard.'}</p>
       ${result.warning && html`<p class="notice">${result.warning}</p>`}
       ${result.proposals.length > 0 && html`<button class="btn primary" onClick=${goReview}>Review now</button>`}

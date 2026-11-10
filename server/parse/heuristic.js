@@ -39,6 +39,46 @@ const ATTRIBUTES = new Set([
 ]);
 const MEASURE = /^\d+(\.\d+)?$/;
 
+// Location inference. A phrase is only treated as a place when a preposition is
+// followed (within a few words) by one of these, so "cable in black" or
+// "plug in adapter" are left alone.
+const PLACE_WORDS = new Set([
+  'shelf', 'shelves', 'drawer', 'drawers', 'box', 'bin', 'cabinet', 'cupboard', 'closet', 'rack', 'toolbox',
+  'desk', 'table', 'bench', 'workbench', 'room', 'garage', 'shed', 'attic', 'basement', 'office', 'lab',
+  'kitchen', 'fridge', 'locker', 'crate', 'basket', 'bag', 'case', 'floor', 'wall', 'corner', 'door',
+  'window', 'hallway', 'storage', 'container', 'tray', 'pegboard', 'wardrobe', 'trunk', 'counter', 'cart',
+]);
+const PREPS_DROPPED = new Set(['in', 'on', 'inside', 'at', 'to']); // "in the top drawer" -> "top drawer"
+const PREPS_KEPT = new Set(['under', 'underneath', 'behind', 'by', 'above', 'below', 'beside', 'near', 'next']);
+const MOVE_WORDS = new Set(['now', 'next', 'then', 'moving', 'going', 'over', 'on', 'and']);
+const clean = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}-]/gu, '');
+
+/**
+ * Try to read a location starting at tokens[at], which must be a preposition.
+ * @returns {{location:string, end:number}|null} end = index after the location
+ */
+function readLocation(tokens, at) {
+  const prep = clean(tokens[at]);
+  let start = at + 1;
+  if (prep === 'next') { if (clean(tokens[start] || '') !== 'to') return null; start++; }
+  else if (!PREPS_DROPPED.has(prep) && !PREPS_KEPT.has(prep)) return null;
+
+  let place = -1;
+  for (let i = start; i < Math.min(tokens.length, start + 5); i++) {
+    if (PLACE_WORDS.has(clean(tokens[i]))) { place = i; break; }
+  }
+  if (place < 0) return null;
+  let end = place + 1;
+  while (end < tokens.length && PLACE_WORDS.has(clean(tokens[end]))) end++;          // "storage room"
+  if (end < tokens.length && /^(\d{1,3}|[a-z])$/i.test(clean(tokens[end]))) end++;     // "shelf B", "bin 3"
+
+  const words = tokens.slice(start, end);
+  let keep = '';
+  if (PREPS_KEPT.has(prep)) keep = prep === 'next' ? 'next to ' : `${prep} `; // "under the desk" reads better whole
+  else while (words.length > 1 && /^(the|my|our|a|an|that|this)$/i.test(words[0])) words.shift();
+  return { location: (keep + words.join(' ')).replace(/[.,;:]+$/, ''), end };
+}
+
 function parseNumber(tok) {
   if (/^\d{1,4}$/.test(tok)) return Number(tok);
   const n = NUMBER_WORDS[tok.toLowerCase()];
@@ -62,7 +102,7 @@ function splitSegments(text) {
   return text
     .replace(FILLER_PHRASES, ' ')
     // sentence punctuation, but keep decimals such as "3.5 mm"
-    .split(/[,;\n!?]+|\.(?=\s|$)|\s+(?:and then|and also|then|also|next|plus)\s+/i)
+    .split(/[,;\n!?]+|\.(?=\s|$)|\s+(?:and then|and also|then|also|next(?!\s+to\b)|plus)\s+/i)
     .flatMap((seg) => {
       // Split on "and" unless it joins two attributes ("black and white").
       const parts = seg.split(/\s+and\s+/i);
@@ -80,11 +120,12 @@ function splitSegments(text) {
 
 /**
  * @param {string} transcript
- * @returns {{name:string, quantity:number, details:string[], confidence:'high'|'medium'|'low', notes:string[]}[]}
+ * @returns {{name:string, quantity:number, details:string[], location:string, confidence:'high'|'medium'|'low', notes:string[]}[]}
  */
 export function parseHeuristic(transcript) {
   const items = [];
   const byNorm = new Map();
+  let currentLocation = ''; // set by a location said on its own, applies until the next one
 
   for (const rawSeg of splitSegments(String(transcript || ''))) {
     let tokens = rawSeg.trim().split(/\s+/).filter(Boolean);
@@ -93,12 +134,35 @@ export function parseHeuristic(transcript) {
     const hadFiller = tokens.length !== before;
     if (!tokens.length) continue;
 
+    // A location said on its own ("on the top shelf", "now in the garage")
+    // applies to the items that follow.
+    let lead = 0;
+    while (lead < tokens.length - 1 && MOVE_WORDS.has(clean(tokens[lead])) && readLocation(tokens, lead) === null) lead++;
+    const standalone = readLocation(tokens, lead);
+    if (standalone) {
+      currentLocation = standalone.location;
+      tokens = tokens.slice(standalone.end);
+      if (!tokens.length) continue;
+    }
+
     // Attribute-only phrase ("black", "2 meters") describes the previous item.
     if (items.length && isAttributePhrase(tokens)) {
       const prev = items[items.length - 1];
       const detail = tokens.join(' ').toLowerCase();
       if (!prev.details.includes(detail)) prev.details.push(detail);
       continue;
+    }
+
+    // A location at the end of an item ("hammer in the red toolbox") is for that item only.
+    let location = currentLocation;
+    for (let i = tokens.length - 2; i > 0; i--) {
+      if (clean(tokens[i]) === 'to') continue; // "to" only starts a standalone location ("moving to the garage")
+      const trailing = readLocation(tokens, i);
+      if (trailing && trailing.end === tokens.length) {
+        location = trailing.location;
+        tokens = tokens.slice(0, i);
+        break;
+      }
     }
 
     let quantity = 1;
@@ -139,15 +203,16 @@ export function parseHeuristic(transcript) {
     if (quantity > 20) notes.push(`Large quantity (${quantity}) — check it wasn't part of the name.`);
     if (tokens.length > 6) notes.push('Long phrase — may be several items run together.');
 
-    const existing = byNorm.get(norm);
+    const key = `${norm}|${location.toLowerCase()}`;
+    const existing = byNorm.get(key);
     if (existing) {
       existing.quantity += quantity;
       existing.said += 1;
       existing.stutter ||= hadFiller && !explicitQty;
       continue;
     }
-    const item = { name, quantity, details: [], notes, said: 1, stutter: false };
-    byNorm.set(norm, item);
+    const item = { name, quantity, details: [], location, notes, said: 1, stutter: false };
+    byNorm.set(key, item);
     items.push(item);
   }
 

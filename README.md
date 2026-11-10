@@ -9,7 +9,7 @@ becomes a review queue of: **USB-C cable ×2** (flagged: said twice after a hesi
 
 ## How it works
 
-1. **Capture** — tap the mic and list things. Speech is transcribed in the browser (Web Speech API); you can also type or use keyboard dictation. An optional "where are you" is applied to everything in the capture.
+1. **Capture** — tap the mic and list things. Speech is transcribed in the browser (Web Speech API); you can also type or use keyboard dictation. An optional "where are you" is applied to everything in the capture; leave it empty and locations are taken from what you say instead ("hammer in the red toolbox", or "on the top shelf" followed by the items there).
 2. **Parse** — the server turns the transcript into line items: with a local model if `QUICKINV_LOCAL_URL` is set, with Claude if `ANTHROPIC_API_KEY` is set, otherwise (and on any model failure) with a built-in heuristic parser.
 3. **Review** — nothing enters the inventory unreviewed. Each proposal can be edited, accepted or rejected. Ambiguities are flagged, and proposals are matched to existing items (exact name → "add to existing" by default; similar name → suggestion).
 4. **Audit log** — every capture (with its raw transcript), accept, merge, edit, delete and rejection is recorded with who and when.
